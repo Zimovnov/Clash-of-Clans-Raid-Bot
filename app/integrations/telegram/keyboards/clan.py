@@ -1,15 +1,17 @@
-from aiogram.types import InlineKeyboardMarkup
+﻿from aiogram.types import InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
+from app.core.i18n import t
 
-def clan_card_keyboard(tag: str, show_requests: bool = False) -> InlineKeyboardMarkup:
+
+def clan_card_keyboard(tag: str, lang: str, show_requests: bool = False) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
-    kb.button(text="Последний отчёт", callback_data=f"report_latest:{tag}")
-    kb.button(text="Построить отчёт", callback_data=f"report_build:{tag}")
-    kb.button(text="Состав", callback_data=f"clan_members:{tag}")
-    kb.button(text="Права доступа", callback_data=f"clan_roles:{tag}")
+    kb.button(text=t(lang, "button.latest_report"), callback_data=f"report_latest:{tag}")
+    kb.button(text=t(lang, "button.build_report"), callback_data=f"report_build:{tag}")
+    kb.button(text=t(lang, "button.members"), callback_data=f"clan_members:{tag}")
+    kb.button(text=t(lang, "button.roles"), callback_data=f"clan_roles:{tag}")
     if show_requests:
-        kb.button(text="Доступ к боту", callback_data=f"access_requests:{tag}")
+        kb.button(text=t(lang, "button.bot_access"), callback_data=f"access_requests:{tag}")
         kb.adjust(2, 2, 1)
         return kb.as_markup()
     kb.adjust(2, 2)
@@ -30,6 +32,7 @@ def clan_members_keyboard(
     page: int,
     has_prev: bool,
     has_next: bool,
+    lang: str,
 ) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     row_sizes: list[int] = []
@@ -48,21 +51,21 @@ def clan_members_keyboard(
     if nav_count:
         row_sizes.append(nav_count)
 
-    kb.button(text="К клану", callback_data=f"clan_open:{tag}")
+    kb.button(text=t(lang, "button.back_to_clan"), callback_data=f"clan_open:{tag}")
     row_sizes.append(1)
 
     kb.adjust(*row_sizes)
     return kb.as_markup()
 
 
-def report_sections_keyboard(tag: str, report_id: int) -> InlineKeyboardMarkup:
+def report_sections_keyboard(tag: str, report_id: int, lang: str) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
-    kb.button(text="На кик", callback_data=f"report_cat:{tag}:{report_id}:kick:1")
-    kb.button(text="Под вопросом", callback_data=f"report_cat:{tag}:{report_id}:questionable:1")
-    kb.button(text="Новички", callback_data=f"report_cat:{tag}:{report_id}:newbie:1")
-    kb.button(text="Покинули клан", callback_data=f"report_cat:{tag}:{report_id}:left_clan:1")
-    kb.button(text="Обновить", callback_data=f"report_build:{tag}")
-    kb.button(text="Назад", callback_data=f"clan_open:{tag}")
+    kb.button(text=t(lang, "button.kick"), callback_data=f"report_cat:{tag}:{report_id}:kick:1")
+    kb.button(text=t(lang, "button.questionable"), callback_data=f"report_cat:{tag}:{report_id}:questionable:1")
+    kb.button(text=t(lang, "button.newbies"), callback_data=f"report_cat:{tag}:{report_id}:newbie:1")
+    kb.button(text=t(lang, "button.left_clan"), callback_data=f"report_cat:{tag}:{report_id}:left_clan:1")
+    kb.button(text=t(lang, "button.refresh"), callback_data=f"report_build:{tag}")
+    kb.button(text=t(lang, "button.back"), callback_data=f"clan_open:{tag}")
     kb.adjust(2, 2, 2)
     return kb.as_markup()
 
@@ -75,6 +78,7 @@ def report_players_keyboard(
     page: int,
     has_prev: bool,
     has_next: bool,
+    lang: str,
 ) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     for row_id, player_name, attacks in players:
@@ -88,50 +92,50 @@ def report_players_keyboard(
     if has_next:
         kb.button(text=">", callback_data=f"report_cat:{tag}:{report_id}:{category}:{page + 1}")
 
-    kb.button(text="Назад к отчёту", callback_data=f"report_latest:{tag}")
+    kb.button(text=t(lang, "button.back_to_report"), callback_data=f"report_latest:{tag}")
     kb.adjust(1)
     return kb.as_markup()
 
 
-def player_card_keyboard(tag: str, report_id: int, category: str, page: int, row_id: int) -> InlineKeyboardMarkup:
+def player_card_keyboard(tag: str, report_id: int, category: str, page: int, row_id: int, lang: str) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
-    kb.button(text="Обновить профиль", callback_data=f"report_player_refresh:{tag}:{report_id}:{category}:{page}:{row_id}")
-    kb.button(text="Назад к списку", callback_data=f"report_cat:{tag}:{report_id}:{category}:{page}")
-    kb.button(text="Назад к отчёту", callback_data=f"report_latest:{tag}")
+    kb.button(text=t(lang, "button.refresh_profile"), callback_data=f"report_player_refresh:{tag}:{report_id}:{category}:{page}:{row_id}")
+    kb.button(text=t(lang, "button.back_to_list"), callback_data=f"report_cat:{tag}:{report_id}:{category}:{page}")
+    kb.button(text=t(lang, "button.back_to_report"), callback_data=f"report_latest:{tag}")
     kb.adjust(1, 1, 1)
     return kb.as_markup()
 
 
-def clan_member_card_keyboard(tag: str, page: int, player_tag: str) -> InlineKeyboardMarkup:
+def clan_member_card_keyboard(tag: str, page: int, player_tag: str, lang: str) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
-    kb.button(text="Обновить профиль", callback_data=f"clan_member_refresh:{tag}:{page}:{player_tag}")
-    kb.button(text="Назад к составу", callback_data=f"clan_members_page:{tag}:{page}")
-    kb.button(text="К клану", callback_data=f"clan_open:{tag}")
+    kb.button(text=t(lang, "button.refresh_profile"), callback_data=f"clan_member_refresh:{tag}:{page}:{player_tag}")
+    kb.button(text=t(lang, "button.back_to_members"), callback_data=f"clan_members_page:{tag}:{page}")
+    kb.button(text=t(lang, "button.back_to_clan"), callback_data=f"clan_open:{tag}")
     kb.adjust(1, 1, 1)
     return kb.as_markup()
 
 
-def access_request_review_keyboard(tag: str, request_id: int) -> InlineKeyboardMarkup:
+def access_request_review_keyboard(tag: str, request_id: int, lang: str) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
-    kb.button(text="Назначить manager", callback_data=f"access_request_approve:{request_id}")
-    kb.button(text="Отклонить", callback_data=f"access_request_reject:{request_id}")
-    kb.button(text="Назад к запросам", callback_data=f"access_requests:{tag}")
+    kb.button(text=t(lang, "button.assign_manager"), callback_data=f"access_request_approve:{request_id}")
+    kb.button(text=t(lang, "button.reject"), callback_data=f"access_request_reject:{request_id}")
+    kb.button(text=t(lang, "button.back_to_requests"), callback_data=f"access_requests:{tag}")
     kb.adjust(1, 1, 1)
     return kb.as_markup()
 
 
-def access_requests_list_keyboard(tag: str, requests: list[tuple[int, str]]) -> InlineKeyboardMarkup:
+def access_requests_list_keyboard(tag: str, requests: list[tuple[int, str]], lang: str) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     for request_id, label in requests:
         kb.button(text=label, callback_data=f"access_request_open:{tag}:{request_id}")
-    kb.button(text="Назад", callback_data=f"clan_open:{tag}")
+    kb.button(text=t(lang, "button.back"), callback_data=f"clan_open:{tag}")
     kb.adjust(1)
     return kb.as_markup()
 
 
-def access_request_resolved_keyboard(tag: str) -> InlineKeyboardMarkup:
+def access_request_resolved_keyboard(tag: str, lang: str) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
-    kb.button(text="К запросам", callback_data=f"access_requests:{tag}")
-    kb.button(text="К клану", callback_data=f"clan_open:{tag}")
+    kb.button(text=t(lang, "button.to_requests"), callback_data=f"access_requests:{tag}")
+    kb.button(text=t(lang, "button.back_to_clan"), callback_data=f"clan_open:{tag}")
     kb.adjust(1, 1)
     return kb.as_markup()

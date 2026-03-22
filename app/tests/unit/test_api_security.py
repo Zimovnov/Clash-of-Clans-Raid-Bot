@@ -28,7 +28,7 @@ def test_docs_can_be_enabled(monkeypatch) -> None:
 
 
 def test_internal_routes_are_disabled_without_token(monkeypatch) -> None:
-    monkeypatch.delenv("INTERNAL_API_TOKEN", raising=False)
+    monkeypatch.setenv("INTERNAL_API_TOKEN", "")
     get_settings.cache_clear()
 
     with TestClient(create_app()) as client:

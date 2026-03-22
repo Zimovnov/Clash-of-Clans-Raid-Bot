@@ -65,3 +65,54 @@ async def test_access_request_flow_creates_pending_and_grants_manager() -> None:
         assert access.role == ClanRole.MANAGER
 
     await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_ownerless_manager_can_review_pending_request() -> None:
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    session_factory = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    owner = TelegramIdentity(telegram_id=1101, username="owner", first_name="Owner", last_name=None)
+    manager = TelegramIdentity(telegram_id=1102, username="manager", first_name="Manager", last_name=None)
+    requester = TelegramIdentity(telegram_id=1103, username="guest", first_name="Guest", last_name=None)
+
+    async with session_factory() as session:
+        service = ClanService(session=session, clash_client=FakeClashClient())
+        owner_result = await service.add_clan_or_request_access(owner, "#CLAN")
+        assert owner_result.action == ClanAccessRequestAction.OWNER_ASSIGNED
+
+        users = UserRepository(session)
+        clans = ClanRepository(session)
+        manager_user = await users.get_or_create(manager.telegram_id, manager.username, manager.first_name, manager.last_name)
+        clan = await clans.get_by_tag("#CLAN")
+        assert clan is not None
+        await clans.grant_role(clan.id, manager_user.id, ClanRole.MANAGER)
+        await session.commit()
+
+    async with session_factory() as session:
+        service = ClanService(session=session, clash_client=FakeClashClient())
+        await service.leave_access(owner, "#CLAN")
+
+    async with session_factory() as session:
+        service = ClanService(session=session, clash_client=FakeClashClient())
+        request_result = await service.add_clan_or_request_access(requester, "#CLAN")
+        assert request_result.action == ClanAccessRequestAction.ACCESS_REQUEST_CREATED
+        assert request_result.access_request is not None
+
+        approved_request = await service.approve_access_request(manager, request_result.access_request.id)
+        assert approved_request.status == ClanAccessRequestStatus.APPROVED
+
+        users = UserRepository(session)
+        clans = ClanRepository(session)
+        requester_user = await users.get_by_telegram_id(requester.telegram_id)
+        clan = await clans.get_by_tag("#CLAN")
+        assert requester_user is not None
+        assert clan is not None
+        access = await clans.get_access(clan.id, requester_user.id)
+        assert access is not None
+        assert access.role == ClanRole.MANAGER
+
+    await engine.dispose()

@@ -64,6 +64,11 @@ class OutboxStatus(str, Enum):
     FAILED = "failed"
 
 
+class UserLanguage(str, Enum):
+    EN = "en"
+    RU = "ru"
+
+
 def _enum_values(enum_cls: type[Enum]) -> list[str]:
     return [str(member.value) for member in enum_cls]
 
@@ -76,6 +81,12 @@ class User(Base):
     username: Mapped[str | None] = mapped_column(String(255), nullable=True)
     first_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     last_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    language: Mapped[UserLanguage] = mapped_column(
+        SqlEnum(UserLanguage, name="user_language", values_callable=_enum_values),
+        default=UserLanguage.EN,
+        server_default=UserLanguage.EN.value,
+        nullable=False,
+    )
     created_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[DateTime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

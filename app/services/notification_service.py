@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dates import format_datetime_human
+from app.core.i18n import localize_scheduler_reason, t
 from app.db.models import OutboxMessage, OutboxStatus, RaidReport
 from app.db.repositories import ClanRepository
 
@@ -26,9 +27,10 @@ class NotificationService:
 
     async def send_report_notifications(self, report: RaidReport) -> None:
         accesses = await self.clans.list_accesses(report.clan_id)
-        text = self._build_report_text(report)
 
         for access in accesses:
+            lang = getattr(access.user, "language", "en")
+            text = self._build_report_text(report, lang=lang)
             dedupe_key = f"report:{report.id}:user:{access.user_id}"
             if await self._is_already_sent(dedupe_key):
                 continue
@@ -60,9 +62,10 @@ class NotificationService:
 
     async def send_build_failure_notification(self, clan_tag: str, clan_id: int, reason: str) -> None:
         accesses = await self.clans.list_accesses(clan_id)
-        text = f"Автоматический отчёт для {clan_tag} не сформирован. Причина: {reason}"
 
         for access in accesses:
+            lang = getattr(access.user, "language", "en")
+            text = t(lang, "notify.failure", tag=clan_tag, reason=localize_scheduler_reason(lang, reason))
             dedupe_key = f"report_failure:{clan_tag}:user:{access.user_id}:{datetime.now(UTC).date()}"
             if await self._is_message_exists(dedupe_key):
                 continue
@@ -101,17 +104,20 @@ class NotificationService:
         stmt = select(OutboxMessage.id).where(OutboxMessage.dedupe_key == dedupe_key)
         return (await self.session.execute(stmt)).scalar_one_or_none() is not None
 
-    def _build_report_text(self, report: RaidReport) -> str:
-        raid_period = "не указан"
+    def _build_report_text(self, report: RaidReport, *, lang: str) -> str:
+        raid_period = t(lang, "report.period_unknown")
         if report.raid_weekend_start_at and report.raid_weekend_end_at:
             raid_period = f"{format_datetime_human(report.raid_weekend_start_at)} - {format_datetime_human(report.raid_weekend_end_at)}"
 
-        return (
-            f"Отчёт по клану {report.clan.tag} ({report.clan.name})\n"
-            f"Период рейда: {raid_period}\n"
-            f"Сгенерирован: {format_datetime_human(report.generated_at)}\n\n"
-            f"На кик: {report.kick_count}\n"
-            f"Под вопросом: {report.question_count}\n"
-            f"Новички: {report.newbie_count}\n"
-            f"Покинули клан: {report.left_count}"
+        return t(
+            lang,
+            "notify.report",
+            tag=report.clan.tag,
+            name=report.clan.name,
+            period=raid_period,
+            generated=format_datetime_human(report.generated_at),
+            kick=report.kick_count,
+            questionable=report.question_count,
+            newbies=report.newbie_count,
+            left=report.left_count,
         )

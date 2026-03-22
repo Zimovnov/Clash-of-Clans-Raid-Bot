@@ -1,7 +1,7 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import User
+from app.db.models import User, UserLanguage
 
 
 class UserRepository:
@@ -38,8 +38,27 @@ class UserRepository:
             username=username,
             first_name=first_name,
             last_name=last_name,
+            language=UserLanguage.EN,
         )
         self.session.add(user)
+        await self.session.flush()
+        return user
+
+    async def set_language(self, telegram_id: int, language: UserLanguage) -> User:
+        user = await self.get_by_telegram_id(telegram_id)
+        if user is None:
+            user = User(
+                telegram_id=telegram_id,
+                username=None,
+                first_name=None,
+                last_name=None,
+                language=language,
+            )
+            self.session.add(user)
+            await self.session.flush()
+            return user
+
+        user.language = language
         await self.session.flush()
         return user
 

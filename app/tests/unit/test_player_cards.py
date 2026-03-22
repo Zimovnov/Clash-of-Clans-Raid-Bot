@@ -11,6 +11,7 @@ def _profile(*, league_name: str | None, raw_payload: dict | None):
             "league_name": league_name,
             "exp_level": 200,
             "town_hall_level": 16,
+            "builder_hall_level": 10,
             "clan_role": "member",
             "refreshed_at": datetime.now(UTC),
             "raw_payload": raw_payload,
@@ -24,7 +25,7 @@ def test_profile_section_uses_best_league_when_current_league_missing() -> None:
         raw_payload={"bestLeague": {"name": "Champion League"}},
     )
 
-    lines = format_profile_section(profile, is_stale=False)
+    lines = format_profile_section(profile, is_stale=False, lang="ru")
 
     assert "Лига: Без текущей, лучшая Champion League" in lines
 
@@ -35,7 +36,7 @@ def test_profile_section_prioritizes_league_tier_from_raw_payload() -> None:
         raw_payload={"leagueTier": {"name": "Witch League 17"}},
     )
 
-    lines = format_profile_section(profile, is_stale=False)
+    lines = format_profile_section(profile, is_stale=False, lang="ru")
 
     assert "Лига: Witch League 17" in lines
 
@@ -46,6 +47,6 @@ def test_profile_section_shows_no_league_explicitly() -> None:
         raw_payload={},
     )
 
-    lines = format_profile_section(profile, is_stale=False)
+    lines = format_profile_section(profile, is_stale=False, lang="ru")
 
     assert "Лига: Без лиги" in lines

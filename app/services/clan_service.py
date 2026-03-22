@@ -71,6 +71,13 @@ class PlayerNoteResult:
     note: str | None
 
 
+@dataclass(slots=True)
+class LeaveAccessResult:
+    clan: Clan
+    role: ClanRole
+    is_unassigned: bool
+
+
 class ClanService:
     def __init__(self, session: AsyncSession, clash_client: ClashApiClient) -> None:
         self.session = session
@@ -102,12 +109,17 @@ class ClanService:
             await self.session.commit()
             return AddClanResult(clan=clan, action=ClanAccessRequestAction.OWNER_ASSIGNED, role=ClanRole.OWNER)
 
+        accesses = await self.clans.list_accesses(clan.id)
+        has_owner = any(item.role == ClanRole.OWNER for item in accesses)
         access = await self.clans.get_access(clan_id=clan.id, user_id=user.id)
         if access:
+            if access.role != ClanRole.OWNER and not has_owner:
+                await self.clans.grant_role(clan_id=clan.id, user_id=user.id, role=ClanRole.OWNER)
+                await self.session.commit()
+                return AddClanResult(clan=clan, action=ClanAccessRequestAction.OWNER_ASSIGNED, role=ClanRole.OWNER)
             await self.session.commit()
             return AddClanResult(clan=clan, action=ClanAccessRequestAction.ACCESS_ALREADY_EXISTS, role=access.role)
 
-        accesses = await self.clans.list_accesses(clan.id)
         if not accesses:
             await self.clans.grant_role(clan_id=clan.id, user_id=user.id, role=ClanRole.OWNER)
             await self._bootstrap_newbie_baseline(clan)
@@ -177,7 +189,7 @@ class ClanService:
         if request.status != ClanAccessRequestStatus.PENDING:
             raise ClanAccessRequestAlreadyHandledError("Заявка уже обработана")
 
-        await self._ensure_owner_or_superadmin(actor.id, request.clan_id, is_superadmin)
+        await self._ensure_request_reviewer_or_superadmin(actor.id, request.clan_id, is_superadmin)
         await self.clans.grant_role(request.clan_id, request.user_id, request.requested_role)
         await self.access_requests.resolve_for_user(
             clan_id=request.clan_id,
@@ -206,7 +218,7 @@ class ClanService:
         if request.status != ClanAccessRequestStatus.PENDING:
             raise ClanAccessRequestAlreadyHandledError("Заявка уже обработана")
 
-        await self._ensure_owner_or_superadmin(actor.id, request.clan_id, is_superadmin)
+        await self._ensure_request_reviewer_or_superadmin(actor.id, request.clan_id, is_superadmin)
         await self.access_requests.resolve_for_user(
             clan_id=request.clan_id,
             user_id=request.user_id,
@@ -281,6 +293,28 @@ class ClanService:
         await self.session.commit()
         return clan, target_user
 
+    async def leave_access(
+        self,
+        actor_identity: TelegramIdentity,
+        raw_tag: str,
+    ) -> LeaveAccessResult:
+        actor = await self.ensure_user(actor_identity)
+        clan = await self._get_clan_or_raise(raw_tag)
+
+        current_access = await self.clans.get_access(clan.id, actor.id)
+        if current_access is None:
+            raise ClanServiceError("Для этого клана нет прямого доступа, который можно снять")
+
+        await self.clans.revoke_access(clan.id, actor.id)
+        remaining_accesses = await self.clans.list_accesses(clan.id)
+        await self.session.commit()
+
+        return LeaveAccessResult(
+            clan=clan,
+            role=current_access.role,
+            is_unassigned=len(remaining_accesses) == 0,
+        )
+
     async def transfer_owner(self, raw_tag: str, telegram_id: int) -> Clan:
         clan_tag = normalize_tag(raw_tag)
         clan = await self.clans.get_by_tag(clan_tag)
@@ -348,3 +382,16 @@ class ClanService:
         access = await self.clans.get_access(clan_id, actor_user_id)
         if access is None or access.role != ClanRole.OWNER:
             raise ClanPermissionDeniedError("Только owner или superadmin могут управлять доступом")
+
+    async def _ensure_request_reviewer_or_superadmin(self, actor_user_id: int, clan_id: int, is_superadmin: bool) -> None:
+        await self._ensure_clan_access(actor_user_id=actor_user_id, clan_id=clan_id, is_superadmin=is_superadmin)
+        access = await self.clans.get_access(clan_id, actor_user_id)
+        if access is None:
+            raise ClanPermissionDeniedError("Только owner или superadmin могут управлять доступом")
+        if access.role == ClanRole.OWNER:
+            return
+        if access.role == ClanRole.MANAGER:
+            owners = await self.clans.list_accesses_by_role(clan_id, ClanRole.OWNER)
+            if not owners:
+                return
+        raise ClanPermissionDeniedError("Только owner или superadmin могут управлять доступом")

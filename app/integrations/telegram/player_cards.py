@@ -1,19 +1,9 @@
-from app.core.dates import format_datetime_human
+﻿from app.core.dates import format_datetime_human
+from app.core.i18n import category_label, t
 from app.db.models import PlayerClanState, PlayerProfile, ReportCategory
 
 
-def category_label(category: ReportCategory) -> str:
-    labels = {
-        ReportCategory.KICK: "На кик",
-        ReportCategory.QUESTIONABLE: "Под вопросом",
-        ReportCategory.NEWBIE: "Новички",
-        ReportCategory.LEFT_CLAN: "Покинули клан",
-        ReportCategory.OK: "Норма",
-    }
-    return labels[category]
-
-
-def _resolve_league_label(profile: PlayerProfile) -> str:
+def _resolve_league_label(profile: PlayerProfile, lang: str) -> str:
     raw_payload = profile.raw_payload or {}
     league_tier = raw_payload.get("leagueTier") or {}
     league_tier_name = str(league_tier.get("name")).strip() if league_tier.get("name") else None
@@ -31,59 +21,67 @@ def _resolve_league_label(profile: PlayerProfile) -> str:
     best_league = raw_payload.get("bestLeague") or {}
     best_league_name = str(best_league.get("name")).strip() if best_league.get("name") else None
     if best_league_name:
-        return f"Без текущей, лучшая {best_league_name}"
+        return t(lang, "profile.no_current_best", name=best_league_name)
 
-    return "Без лиги"
+    return t(lang, "profile.no_league")
 
 
-def format_profile_section(profile: PlayerProfile | None, *, is_stale: bool) -> list[str]:
+def format_profile_section(profile: PlayerProfile | None, *, is_stale: bool, lang: str) -> list[str]:
     if profile is None:
         return [
-            "Профиль игрока:",
-            "Уровень: -",
-            "Ратуша: -",
-            "Лига: Без данных",
-            "Роль в клане: -",
-            "Профиль ещё не загружен.",
+            t(lang, "profile.title"),
+            t(lang, "profile.level", value="-"),
+            t(lang, "profile.town_hall", value="-"),
+            t(lang, "profile.builder_hall", value="-"),
+            t(lang, "profile.league", value=t(lang, "profile.empty_league")),
+            t(lang, "profile.role", value="-"),
+            t(lang, "profile.not_loaded"),
         ]
 
-    freshness = "требует обновления" if is_stale else "актуален"
+    freshness = t(lang, "profile.stale") if is_stale else t(lang, "profile.fresh")
     return [
-        "Профиль игрока:",
-        f"Уровень: {profile.exp_level or '-'}",
-        f"Ратуша: {profile.town_hall_level or '-'}",
-        f"Лига: {_resolve_league_label(profile)}",
-        f"Роль в клане: {profile.clan_role or '-'}",
-        f"Обновлён: {format_datetime_human(profile.refreshed_at)} ({freshness})",
+        t(lang, "profile.title"),
+        t(lang, "profile.level", value=profile.exp_level or "-"),
+        t(lang, "profile.town_hall", value=profile.town_hall_level or "-"),
+        t(lang, "profile.builder_hall", value=profile.builder_hall_level or "-"),
+        t(lang, "profile.league", value=_resolve_league_label(profile, lang)),
+        t(lang, "profile.role", value=profile.clan_role or "-"),
+        t(lang, "profile.updated", value=format_datetime_human(profile.refreshed_at), freshness=freshness),
     ]
 
 
-def build_report_player_card_text(row, manager_note: str | None, profile: PlayerProfile | None, *, is_profile_stale: bool) -> str:
+def _service_note(lang: str, row) -> str:
+    if row.left_clan_note:
+        return t(lang, "player.left_clan_note")
+    return t(lang, "general.none")
+
+
+def build_report_player_card_text(row, manager_note: str | None, profile: PlayerProfile | None, *, is_profile_stale: bool, lang: str) -> str:
     lines = [
-        f"Ник: {row.player_name}",
-        f"Тег: {row.player_tag}",
-        f"Атак: {row.attacks_used}",
-        f"Категория: {category_label(row.category)}",
-        f"В клане сейчас: {'да' if row.is_current_member else 'нет'}",
-        f"Первое обнаружение в клане: {format_datetime_human(row.first_seen_in_clan_at)}",
-        f"Примечание: {manager_note or '-'}",
-        f"Служебная пометка: {row.left_clan_note or '-'}",
+        t(lang, "player.nickname", value=row.player_name),
+        t(lang, "player.tag", value=row.player_tag),
+        t(lang, "player.attacks", value=row.attacks_used),
+        t(lang, "player.category", value=category_label(lang, row.category)),
+        t(lang, "player.current_member", value=t(lang, "general.yes") if row.is_current_member else t(lang, "general.no")),
+        t(lang, "player.first_seen", value=format_datetime_human(row.first_seen_in_clan_at)),
+        t(lang, "player.note", value=manager_note or t(lang, "general.none")),
+        t(lang, "player.service_note", value=_service_note(lang, row)),
         "",
-        *format_profile_section(profile, is_stale=is_profile_stale),
+        *format_profile_section(profile, is_stale=is_profile_stale, lang=lang),
     ]
     return "\n".join(lines)
 
 
-def build_clan_member_card_text(state: PlayerClanState, manager_note: str | None, profile: PlayerProfile | None, *, is_profile_stale: bool) -> str:
+def build_clan_member_card_text(state: PlayerClanState, manager_note: str | None, profile: PlayerProfile | None, *, is_profile_stale: bool, lang: str) -> str:
     player = state.player
     lines = [
-        f"Ник: {player.name if player is not None else '-'}",
-        f"Тег: {player.tag if player is not None else '-'}",
-        f"В клане сейчас: {'да' if state.is_current_member else 'нет'}",
-        f"Первое обнаружение в клане: {format_datetime_human(state.first_seen_in_clan_at)}",
-        f"Последнее обнаружение: {format_datetime_human(state.last_seen_in_clan_at)}",
-        f"Примечание: {manager_note or '-'}",
+        t(lang, "player.nickname", value=player.name if player is not None else "-"),
+        t(lang, "player.tag", value=player.tag if player is not None else "-"),
+        t(lang, "player.current_member", value=t(lang, "general.yes") if state.is_current_member else t(lang, "general.no")),
+        t(lang, "player.first_seen", value=format_datetime_human(state.first_seen_in_clan_at)),
+        t(lang, "player.last_seen", value=format_datetime_human(state.last_seen_in_clan_at)),
+        t(lang, "player.note", value=manager_note or t(lang, "general.none")),
         "",
-        *format_profile_section(profile, is_stale=is_profile_stale),
+        *format_profile_section(profile, is_stale=is_profile_stale, lang=lang),
     ]
     return "\n".join(lines)

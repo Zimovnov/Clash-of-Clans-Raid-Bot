@@ -19,11 +19,13 @@
     ReportSource,
     ReportStatus,
     User,
+    UserLanguage,
 )
 
 __all__ = [
     "Base",
     "User",
+    "UserLanguage",
     "Clan",
     "ClanAccess",
     "ClanAccessRequest",

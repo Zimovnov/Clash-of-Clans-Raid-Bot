@@ -1,5 +1,6 @@
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 from sqlalchemy.orm import selectinload
 
 from app.db.models import Clan, ClanAccess, ClanRole
@@ -59,6 +60,22 @@ class ClanRepository:
 
     async def has_any_access_for_user(self, user_id: int) -> bool:
         stmt = select(ClanAccess.id).where(ClanAccess.user_id == user_id).limit(1)
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none() is not None
+
+    async def has_ownerless_manager_access_for_user(self, user_id: int) -> bool:
+        owner_access = aliased(ClanAccess)
+        owner_exists = (
+            select(owner_access.id)
+            .where(owner_access.clan_id == ClanAccess.clan_id, owner_access.role == ClanRole.OWNER)
+            .exists()
+        )
+        stmt = (
+            select(ClanAccess.id)
+            .where(ClanAccess.user_id == user_id, ClanAccess.role == ClanRole.MANAGER)
+            .where(~owner_exists)
+            .limit(1)
+        )
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none() is not None
 

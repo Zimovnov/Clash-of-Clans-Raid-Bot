@@ -66,6 +66,221 @@ async def test_manager_cannot_grant_or_revoke_access() -> None:
     await engine.dispose()
 
 
+@pytest.mark.asyncio
+async def test_manager_can_leave_clan_access() -> None:
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    session_factory = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    async with session_factory() as session:
+        users = UserRepository(session)
+        clans = ClanRepository(session)
+
+        owner = await users.get_or_create(telegram_id=4001, username="owner", first_name="Owner", last_name=None)
+        manager = await users.get_or_create(telegram_id=4002, username="manager", first_name="Manager", last_name=None)
+
+        clan = Clan(tag="#CLAN", name="Clan", is_tracking=True)
+        session.add(clan)
+        await session.flush()
+
+        await clans.grant_role(clan.id, owner.id, ClanRole.OWNER)
+        await clans.grant_role(clan.id, manager.id, ClanRole.MANAGER)
+        await session.commit()
+
+    async with session_factory() as session:
+        service = ClanService(session=session, clash_client=DummyClashClient())
+        result = await service.leave_access(
+            actor_identity=TelegramIdentity(
+                telegram_id=4002,
+                username="manager",
+                first_name="Manager",
+                last_name=None,
+            ),
+            raw_tag="#CLAN",
+        )
+
+        remaining = await ClanRepository(session).list_accesses(result.clan.id)
+        assert result.role == ClanRole.MANAGER
+        assert result.is_unassigned is False
+        assert len(remaining) == 1
+        assert remaining[0].role == ClanRole.OWNER
+
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_last_owner_can_leave_and_next_user_can_claim_clan() -> None:
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    session_factory = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    async with session_factory() as session:
+        users = UserRepository(session)
+        clans = ClanRepository(session)
+
+        owner = await users.get_or_create(telegram_id=5001, username="owner", first_name="Owner", last_name=None)
+        clan = Clan(tag="#CLAN", name="Clan", is_tracking=True)
+        session.add(clan)
+        await session.flush()
+
+        await clans.grant_role(clan.id, owner.id, ClanRole.OWNER)
+        await session.commit()
+
+    async with session_factory() as session:
+        service = ClanService(session=session, clash_client=OnboardingClashClient())
+        leave_result = await service.leave_access(
+            actor_identity=TelegramIdentity(
+                telegram_id=5001,
+                username="owner",
+                first_name="Owner",
+                last_name=None,
+            ),
+            raw_tag="#CLAN",
+        )
+
+        assert leave_result.role == ClanRole.OWNER
+        assert leave_result.is_unassigned is True
+        assert await ClanRepository(session).list_accesses(leave_result.clan.id) == []
+
+    async with session_factory() as session:
+        service = ClanService(session=session, clash_client=OnboardingClashClient())
+        claim_result = await service.add_clan_or_request_access(
+            TelegramIdentity(
+                telegram_id=5002,
+                username="new_owner",
+                first_name="New Owner",
+                last_name=None,
+            ),
+            "#CLAN",
+        )
+
+        accesses = await ClanRepository(session).list_accesses(claim_result.clan.id)
+        assert claim_result.action.value == "owner_assigned"
+        assert claim_result.role == ClanRole.OWNER
+        assert len(accesses) == 1
+        assert accesses[0].role == ClanRole.OWNER
+        assert accesses[0].user.telegram_id == 5002
+
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_manager_can_claim_owner_via_addclan_when_clan_has_no_owner() -> None:
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    session_factory = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    async with session_factory() as session:
+        users = UserRepository(session)
+        clans = ClanRepository(session)
+
+        owner = await users.get_or_create(telegram_id=6001, username="owner", first_name="Owner", last_name=None)
+        manager = await users.get_or_create(telegram_id=6002, username="manager", first_name="Manager", last_name=None)
+
+        clan = Clan(tag="#CLAN", name="Clan", is_tracking=True)
+        session.add(clan)
+        await session.flush()
+
+        await clans.grant_role(clan.id, owner.id, ClanRole.OWNER)
+        await clans.grant_role(clan.id, manager.id, ClanRole.MANAGER)
+        await session.commit()
+
+    async with session_factory() as session:
+        service = ClanService(session=session, clash_client=OnboardingClashClient())
+        await service.leave_access(
+            actor_identity=TelegramIdentity(
+                telegram_id=6001,
+                username="owner",
+                first_name="Owner",
+                last_name=None,
+            ),
+            raw_tag="#CLAN",
+        )
+
+    async with session_factory() as session:
+        service = ClanService(session=session, clash_client=OnboardingClashClient())
+        result = await service.add_clan_or_request_access(
+            TelegramIdentity(
+                telegram_id=6002,
+                username="manager",
+                first_name="Manager",
+                last_name=None,
+            ),
+            "#CLAN",
+        )
+
+        accesses = await ClanRepository(session).list_accesses(result.clan.id)
+        assert result.action.value == "owner_assigned"
+        assert result.role == ClanRole.OWNER
+        assert len(accesses) == 1
+        assert accesses[0].role == ClanRole.OWNER
+        assert accesses[0].user.telegram_id == 6002
+
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_outsider_can_create_manager_request_when_clan_has_managers_but_no_owner() -> None:
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    session_factory = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    async with session_factory() as session:
+        users = UserRepository(session)
+        clans = ClanRepository(session)
+
+        owner = await users.get_or_create(telegram_id=7001, username="owner", first_name="Owner", last_name=None)
+        manager = await users.get_or_create(telegram_id=7002, username="manager", first_name="Manager", last_name=None)
+
+        clan = Clan(tag="#CLAN", name="Clan", is_tracking=True)
+        session.add(clan)
+        await session.flush()
+
+        await clans.grant_role(clan.id, owner.id, ClanRole.OWNER)
+        await clans.grant_role(clan.id, manager.id, ClanRole.MANAGER)
+        await session.commit()
+
+    async with session_factory() as session:
+        service = ClanService(session=session, clash_client=OnboardingClashClient())
+        await service.leave_access(
+            actor_identity=TelegramIdentity(
+                telegram_id=7001,
+                username="owner",
+                first_name="Owner",
+                last_name=None,
+            ),
+            raw_tag="#CLAN",
+        )
+
+    async with session_factory() as session:
+        service = ClanService(session=session, clash_client=OnboardingClashClient())
+        result = await service.add_clan_or_request_access(
+            TelegramIdentity(
+                telegram_id=7003,
+                username="outsider",
+                first_name="Outsider",
+                last_name=None,
+            ),
+            "#CLAN",
+        )
+
+        overview = await service.list_roles("#CLAN")
+        assert result.action.value == "access_request_created"
+        assert result.access_request is not None
+        assert overview is not None
+        assert len(overview.pending_requests) == 1
+
+    await engine.dispose()
+
+
 class OnboardingClashClient:
     async def get_clan(self, clan_tag: str):
         return {"tag": clan_tag, "name": "Clan"}
