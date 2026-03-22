@@ -379,6 +379,7 @@ async def cb_report_player(callback: CallbackQuery, lang: str) -> None:
     await callback.message.edit_text(
         text,
         reply_markup=player_card_keyboard(clan_tag, report_id, category_raw, page, row_id, lang),
+        parse_mode="HTML",
     )
     await callback.answer()
 
@@ -450,5 +451,6 @@ async def cb_report_player_refresh(callback: CallbackQuery, lang: str) -> None:
     await callback.message.edit_text(
         text,
         reply_markup=player_card_keyboard(clan_tag, report_id, category_raw, page, row_id, lang),
+        parse_mode="HTML",
     )
     await callback.answer(t(lang, "profile.refreshed"))

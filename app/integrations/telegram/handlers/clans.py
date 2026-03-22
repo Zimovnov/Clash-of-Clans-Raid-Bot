@@ -825,6 +825,7 @@ async def cb_clan_member_open(callback: CallbackQuery, lang: str) -> None:
         await callback.message.edit_text(
             text,
             reply_markup=clan_member_card_keyboard(clan.tag, page, state.player.tag, lang),
+            parse_mode="HTML",
         )
     if profile_error is not None:
         await callback.answer(_build_profile_error_text(lang, profile_error), show_alert=True)
@@ -881,6 +882,7 @@ async def cb_clan_member_refresh(callback: CallbackQuery, lang: str) -> None:
         await callback.message.edit_text(
             text,
             reply_markup=clan_member_card_keyboard(clan.tag, page, state.player.tag, lang),
+            parse_mode="HTML",
         )
     await callback.answer(t(lang, "profile.refreshed"))
 
