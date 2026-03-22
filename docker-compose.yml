@@ -1,0 +1,89 @@
+services:
+  db:
+    image: postgres:16
+    container_name: clashinfobot-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    ports:
+      - "${DB_BIND_HOST:-127.0.0.1}:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:?POSTGRES_USER is required} -d ${POSTGRES_DB:?POSTGRES_DB is required}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+
+  api:
+    build: .
+    container_name: clashinfobot-api
+    restart: unless-stopped
+    init: true
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["python", "-m", "app.run_api"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      CLASH_API_TOKEN: ${CLASH_API_TOKEN:?CLASH_API_TOKEN is required}
+      APP_TIMEZONE: ${APP_TIMEZONE:-UTC}
+      DISPLAY_TIMEZONE: ${DISPLAY_TIMEZONE:-Europe/Moscow}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      CLASH_API_BASE_URL: ${CLASH_API_BASE_URL:-https://api.clashofclans.com/v1}
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:-}
+      API_DOCS_ENABLED: ${API_DOCS_ENABLED:-false}
+      API_HOST: ${API_HOST:-0.0.0.0}
+      API_PORT: ${API_PORT:-8000}
+    ports:
+      - "${API_BIND_HOST:-127.0.0.1}:${API_PORT:-8000}:${API_PORT:-8000}"
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:${API_PORT:-8000}/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  bot:
+    build: .
+    container_name: clashinfobot-bot
+    restart: unless-stopped
+    init: true
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["python", "-m", "app.run_bot"]
+    environment:
+      BOT_TOKEN: ${BOT_TOKEN:?BOT_TOKEN is required}
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      CLASH_API_TOKEN: ${CLASH_API_TOKEN:?CLASH_API_TOKEN is required}
+      APP_TIMEZONE: ${APP_TIMEZONE:-UTC}
+      DISPLAY_TIMEZONE: ${DISPLAY_TIMEZONE:-Europe/Moscow}
+      SUPERADMIN_TELEGRAM_IDS: ${SUPERADMIN_TELEGRAM_IDS:-}
+      SYNC_INTERVAL_HOURS: ${SYNC_INTERVAL_HOURS:-3}
+      REPORT_TIME_UTC: ${REPORT_TIME_UTC:-08:02}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      CLASH_API_BASE_URL: ${CLASH_API_BASE_URL:-https://api.clashofclans.com/v1}
+      REPORT_RETRY_DELAYS_MINUTES: ${REPORT_RETRY_DELAYS_MINUTES:-5,15,30,120}
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+volumes:
+  pgdata:
