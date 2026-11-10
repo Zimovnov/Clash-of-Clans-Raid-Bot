@@ -12,11 +12,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY pyproject.toml /app/pyproject.toml
 COPY README.md /app/README.md
+COPY requirements.lock /app/requirements.lock
 COPY app /app/app
 COPY alembic /app/alembic
 COPY alembic.ini /app/alembic.ini
 
-RUN pip install --upgrade pip && pip install .
+RUN pip install --require-hashes -r requirements.lock && pip install --no-deps .
 RUN addgroup --system app && adduser --system --ingroup app --home /app app && chown -R app:app /app
 
 USER app

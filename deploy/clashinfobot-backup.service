@@ -1,0 +1,13 @@
+[Unit]
+Description=ClashInfoBot encrypted PostgreSQL backup and isolated restore check
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+UMask=0077
+Nice=10
+IOSchedulingClass=idle
+# Serialize with the existing Mindflower backup on this shared VPS.
+ExecStart=/usr/bin/flock -n /run/mindflower-backup.lock /usr/bin/python3 /opt/clashinfobot/ops/backup.py
+TimeoutStartSec=900

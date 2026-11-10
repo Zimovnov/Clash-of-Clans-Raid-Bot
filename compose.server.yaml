@@ -1,0 +1,103 @@
+name: clashinfobot
+
+x-app: &app
+  image: ${CLASHINFOBOT_IMAGE:?CLASHINFOBOT_IMAGE is required}
+  restart: unless-stopped
+  init: true
+  read_only: true
+  tmpfs:
+    - /tmp:size=16m,noexec,nosuid
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  pids_limit: 64
+  cpus: 0.25
+  oom_score_adj: 500
+  logging:
+    driver: json-file
+    options:
+      max-size: 5m
+      max-file: "3"
+  networks: [backend, outbound]
+  environment: &app-env
+    DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+    CLASH_API_TOKEN: ${CLASH_API_TOKEN:?CLASH_API_TOKEN is required}
+    CLASH_API_BASE_URL: https://api.clashofclans.com/v1
+    APP_TIMEZONE: ${APP_TIMEZONE:-UTC}
+    DISPLAY_TIMEZONE: ${DISPLAY_TIMEZONE:-Europe/Moscow}
+    LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  depends_on:
+    db:
+      condition: service_healthy
+
+services:
+  db:
+    image: ${CLASHINFOBOT_POSTGRES_IMAGE:-postgres:16-alpine}
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    command: [postgres, -c, shared_buffers=24MB, -c, max_connections=30, -c, work_mem=2MB, -c, maintenance_work_mem=24MB]
+    volumes:
+      - ${CLASHINFOBOT_DATA_DIR:-/opt/clashinfobot/data/postgres}:/var/lib/postgresql/data
+    networks: [backend]
+    mem_limit: 128m
+    cpus: 0.25
+    oom_score_adj: 500
+    pids_limit: 64
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -h 127.0.0.1 -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: "3"
+
+  migrate:
+    <<: *app
+    profiles: [ops]
+    restart: "no"
+    mem_limit: 192m
+    command: [alembic, upgrade, head]
+
+  api:
+    <<: *app
+    profiles: [api]
+    mem_limit: 128m
+    command: [python, -m, app.run_api]
+    environment:
+      <<: *app-env
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:?INTERNAL_API_TOKEN is required}
+      API_DOCS_ENABLED: "false"
+      API_HOST: 0.0.0.0
+      API_PORT: "8000"
+    ports: ["127.0.0.1:8011:8000"]
+    healthcheck:
+      test: [CMD, curl, -fsS, http://127.0.0.1:8000/ready]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  bot:
+    <<: *app
+    mem_limit: 256m
+    stop_grace_period: 30s
+    command: [python, -m, app.run_bot]
+    environment:
+      <<: *app-env
+      BOT_TOKEN: ${BOT_TOKEN:?BOT_TOKEN is required}
+      SUPERADMIN_TELEGRAM_IDS: ${SUPERADMIN_TELEGRAM_IDS:-}
+      SYNC_INTERVAL_HOURS: ${SYNC_INTERVAL_HOURS:-3}
+      REPORT_TIME_UTC: ${REPORT_TIME_UTC:-08:02}
+      REPORT_RETRY_DELAYS_MINUTES: ${REPORT_RETRY_DELAYS_MINUTES:-5,15,30,120}
+
+networks:
+  backend:
+    internal: true
+  outbound: {}

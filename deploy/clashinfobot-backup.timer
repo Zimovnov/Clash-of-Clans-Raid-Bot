@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily verified ClashInfoBot backup
+
+[Timer]
+OnCalendar=*-*-* 04:00:00 UTC
+RandomizedDelaySec=300
+Persistent=true
+Unit=clashinfobot-backup.service
+
+[Install]
+WantedBy=timers.target
