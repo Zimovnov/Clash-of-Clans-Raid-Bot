@@ -29,6 +29,7 @@ class AccessRequestRepository:
                 selectinload(ClanAccessRequest.user),
                 selectinload(ClanAccessRequest.resolved_by_user),
             )
+            .execution_options(populate_existing=True)
         )
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()

@@ -378,12 +378,16 @@ class ClanService:
             raise ClanAccessDeniedError("У вас нет доступа к этому клану")
 
     async def _ensure_owner_or_superadmin(self, actor_user_id: int, clan_id: int, is_superadmin: bool) -> None:
+        if is_superadmin:
+            return
         await self._ensure_clan_access(actor_user_id=actor_user_id, clan_id=clan_id, is_superadmin=is_superadmin)
         access = await self.clans.get_access(clan_id, actor_user_id)
         if access is None or access.role != ClanRole.OWNER:
             raise ClanPermissionDeniedError("Только owner или superadmin могут управлять доступом")
 
     async def _ensure_request_reviewer_or_superadmin(self, actor_user_id: int, clan_id: int, is_superadmin: bool) -> None:
+        if is_superadmin:
+            return
         await self._ensure_clan_access(actor_user_id=actor_user_id, clan_id=clan_id, is_superadmin=is_superadmin)
         access = await self.clans.get_access(clan_id, actor_user_id)
         if access is None:
