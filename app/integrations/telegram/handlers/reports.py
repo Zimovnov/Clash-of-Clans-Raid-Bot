@@ -274,7 +274,7 @@ async def cb_report_category(callback: CallbackQuery, lang: str) -> None:
             return
 
         report = await reports.get_by_id(report_id)
-        if report is None:
+        if report is None or report.clan_id != clan.id:
             await callback.answer(t(lang, "general.report_not_found"), show_alert=True)
             return
 
@@ -353,7 +353,7 @@ async def cb_report_player(callback: CallbackQuery, lang: str) -> None:
             return
 
         report = await reports.get_by_id(report_id)
-        if report is None:
+        if report is None or report.clan_id != clan.id:
             await callback.answer(t(lang, "general.report_not_found"), show_alert=True)
             return
 
@@ -422,7 +422,7 @@ async def cb_report_player_refresh(callback: CallbackQuery, lang: str) -> None:
             return
 
         report = await reports.get_by_id(report_id)
-        if report is None:
+        if report is None or report.clan_id != clan.id:
             await callback.answer(t(lang, "general.report_not_found"), show_alert=True)
             return
 
